@@ -58,7 +58,6 @@ def update(args):
         for grp in udata.get("groups", []):
             group_members[grp] = group_members.get(grp, []) + [user]
 
-        group_members[grp] = group_members.get(grp, []) + [user]
         gids[user] = gid
 
         def make_and_own(d):
@@ -101,8 +100,10 @@ def update(args):
     with open(join(extrausers_root, "passwd"), "w") as outf:
         outf.write("\n".join(passwd_lines))
 
-    with open(join(extrausers_root, "shadow"), "w") as outf:
+    shadow_file = join(extrausers_root, "shadow")
+    with open(shadow_file, "w") as outf:
         outf.write("\n".join(shadow_lines))
+    os.chmod(oct("0600"), shadow_file)
 
     with open(join(extrausers_root, "group"), "w") as outf:
         outf.write("\n".join(group_lines))
