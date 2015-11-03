@@ -40,7 +40,7 @@ def update(args):
                 "x",
                 str(uid),
                 str(gid),
-                udata["name"]+",,,",
+                udata["name"],
                 home_dir,
                 udata.get("shell", default_shell)]))
 
