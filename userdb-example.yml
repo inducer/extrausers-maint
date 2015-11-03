@@ -1,0 +1,21 @@
+# rename to userdb.yml
+
+home_root: /home
+extrausers_root: /var/lib/extrausers
+default_shell: /bin/bash
+
+groups:
+    gpu:
+        gid: 2000
+
+users:
+    andreask:
+        uid: 3000
+        name: Andreas Kloeckner
+        shell: /bin/zsh
+        crypted_password: $6$o9dbkfIa$JLHbb9HTzeJkSjLz/enmZPgHj0vEFQVo1d/6CjRiBoufjZKTjyUsmY2ihrDuQj/KzYL7fVHWViQHYyP/8oanE0
+        ssh_keys:
+            - |
+                ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCQ7/Uj+4rM46PaegjrLHZmqu46ApWt2C15ozyPlWW0xFEi9FRvqD/lKZDq7eAE8W2+bVpyXselJWfZY/v4Lf1u/MTONakyiKTUhuTZT7Tko+AJpw2alzubdE6gy7bpQFcANUx/IL4mKRb/mN2DrekMPv7j3syHm0P3IgldB/Sw2tH3kdCiuPr3pQDLLvjAS4UrylTp+5sZjPoGPo4grmoTJn/TejPnt4e0BzGRX7grgfP+HJPyi/TnTesvIEdk+QGcZ+//qe8Q9uv3ic8yBmhY/8dHQ/nWc/h5SkLNYogT7Owzh3doSjeF4xSSj7apobLB3dknRw0iYvGy4ady7RXV andreask@localhost
+        groups:
+        - gpu
