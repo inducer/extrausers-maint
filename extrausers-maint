@@ -98,15 +98,15 @@ def update(args):
             ",".join(members)]))
 
     with open(join(extrausers_root, "passwd"), "w") as outf:
-        outf.write("\n".join(passwd_lines))
+        outf.write("\n".join(passwd_lines) + "\n")
 
     shadow_file = join(extrausers_root, "shadow")
     with open(shadow_file, "w") as outf:
-        outf.write("\n".join(shadow_lines))
+        outf.write("\n".join(shadow_lines) + "\n")
     os.chmod(shadow_file, 0o600)
 
     with open(join(extrausers_root, "group"), "w") as outf:
-        outf.write("\n".join(group_lines))
+        outf.write("\n".join(group_lines) + "\n")
 
 
 def change_password(args):
