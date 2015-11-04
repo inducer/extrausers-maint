@@ -86,6 +86,9 @@ def update(args):
 
     for grp, gdata in db["groups"].items():
         gids[grp] = gdata["gid"]
+        group_members[grp] = (
+                group_members.get(grp, [])
+                + gdata.get("members", []))
 
     group_lines = []
 
