@@ -5,3 +5,5 @@ build
 *.pyo
 
 userdb.yml
+
+update.sh
