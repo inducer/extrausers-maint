@@ -15,7 +15,7 @@ def load_db(args):
 def save_db(args, db):
     import yaml
     with open(args.db, "w") as dbf:
-        dbf.write(yaml.dump(db, default_flow_style=False))
+        dbf.write(yaml.dump(db, default_flow_style=False, indent=4))
 
 
 def update(args):
