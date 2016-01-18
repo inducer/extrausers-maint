@@ -3,6 +3,8 @@
 home_root: /home
 extrausers_root: /var/lib/extrausers
 default_shell: /bin/bash
+shared_root: /shared
+shared_local: shared
 
 groups:
     gpu:

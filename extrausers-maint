@@ -25,6 +25,22 @@ def update(args):
     extrausers_root = db["extrausers_root"]
     default_shell = db.get("default_shell")
 
+    if args.with_shared:
+        """
+        shared_root : location of the NFS shared mount point
+                      e.g. /shared
+                      this is an absolute path
+        shared_local : location of the local sim link to shared_root
+                       e.g. shared will make $HOME/shared
+                      this is a relative path
+        """
+        try:
+            shared_root = db["shared_root"]
+            shared_local = db["shared_local"]
+        except:
+            raise KeyError('You need to set shared_root and shared_local' +
+                           ' in the yml')
+
     group_members = {}
     gids = {}
 
@@ -84,6 +100,16 @@ def update(args):
         if not args.no_chown:
             os.chown(keys_file, uid, gid)
             os.chmod(keys_file, 0o400)
+
+        if args.with_shared:
+            # this makes (for example)
+            # /shared/username
+            # and
+            # /home/username/share
+            shared_root_dir = join(shared_root, user)
+            shared_local_dir = join(home_dir, shared_local)
+            make_and_own(shared_root_dir)
+            make_and_own(shared_local_dir)
 
     for grp, gdata in db["groups"].items():
         gids[grp] = gdata["gid"]
