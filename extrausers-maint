@@ -117,7 +117,7 @@ def update(args):
                 try:
                     os.symlink(shared_root_dir, shared_local_dir)
                 except OSError:
-                    print('your local shared link cannot be made for %d' %d user)
+                    print('your local shared cannot be made for %d' % user)
 
     for grp, gdata in db["groups"].items():
         gids[grp] = gdata["gid"]
