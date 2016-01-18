@@ -38,8 +38,8 @@ def update(args):
             shared_root = db["shared_root"]
             shared_local = db["shared_local"]
         except:
-            raise KeyError('You need to set shared_root and shared_local' +
-                           ' in the yml')
+            raise KeyError("You need to set shared_root and shared_local" +
+                           " in the yml")
 
     group_members = {}
     gids = {}
@@ -111,13 +111,12 @@ def update(args):
             make_and_own(shared_root_dir)
 
             # check for the symlink
-            if os.path.islink(shared_local_dir):
-                pass
-            else:
+            if not os.path.islink(shared_local_dir):
                 try:
                     os.symlink(shared_root_dir, shared_local_dir)
+                    os.chown(shared_local_dir, uid, gid)
                 except OSError:
-                    print('your local shared cannot be made for %d' % user)
+                    print("your local shared cannot be made for %" % user)
 
     for grp, gdata in db["groups"].items():
         gids[grp] = gdata["gid"]
