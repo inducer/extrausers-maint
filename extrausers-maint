@@ -109,7 +109,7 @@ def update(args):
             shared_root_dir = join(shared_root, user)
             shared_local_dir = join(home_dir, shared_local)
             make_and_own(shared_root_dir)
-            make_and_own(shared_local_dir)
+            os.link(shared_root_dir, shared_local_dir)
 
     for grp, gdata in db["groups"].items():
         gids[grp] = gdata["gid"]
