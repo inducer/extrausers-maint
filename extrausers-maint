@@ -136,6 +136,9 @@ def main():
 
     parser_update = subp.add_parser("update")
     parser_update.add_argument("--no-chown", action="store_true")
+    parser_update.add_argument("--with-shared", action="store_true",
+                               help="Set this to update a shared folder"+
+                                    " in the user directory")
     parser_update.set_defaults(func=update)
 
     parser_passwd = subp.add_parser("passwd")
