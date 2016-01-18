@@ -114,9 +114,11 @@ def update(args):
             if not os.path.islink(shared_local_dir):
                 try:
                     os.symlink(shared_root_dir, shared_local_dir)
-                    os.chown(shared_local_dir, uid, gid)
                 except OSError:
                     print("your local shared cannot be made for %" % user)
+
+            if os.path.islink(shared_local_dir):
+                os.lchown(shared_local_dir, uid, gid)
 
     for grp, gdata in db["groups"].items():
         gids[grp] = gdata["gid"]
