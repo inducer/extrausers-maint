@@ -113,7 +113,7 @@ def update(args):
                 os.rmdir(shared_local_dir)  # emtpy directory is called shared
             except:
                 raise OSError('your local shared directory is not empty')
-            os.link(shared_root_dir, shared_local_dir)
+            os.symlink(shared_root_dir, shared_local_dir)
 
     for grp, gdata in db["groups"].items():
         gids[grp] = gdata["gid"]
