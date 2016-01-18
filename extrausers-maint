@@ -119,6 +119,7 @@ def update(args):
 
             if os.path.islink(shared_local_dir):
                 os.lchown(shared_local_dir, uid, gid)
+                os.lchmod(shared_local_dir, 0o755)
 
     for grp, gdata in db["groups"].items():
         gids[grp] = gdata["gid"]
