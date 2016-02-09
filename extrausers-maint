@@ -156,6 +156,10 @@ def change_password(args):
     salt = b64encode(os.urandom(16)).decode()
     import getpass
     pw = getpass.getpass()
+    pw_confirm = getpass.getpass()
+
+    if pw != pw_confirm:
+        raise RuntimeError("passwords do not match")
 
     crypted_password = crypt(pw, "$6$%s$" % salt)
 
