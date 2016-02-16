@@ -32,7 +32,7 @@ def update(args):
                       this is an absolute path
         shared_local : location of the local sim link to shared_root
                        e.g. shared will make $HOME/shared
-                      this is a relative path
+                       this is a relative path
         """
         try:
             shared_root = db["shared_root"]
@@ -105,17 +105,23 @@ def update(args):
             # this makes (for example)
             # /shared/username
             # and
-            # /home/username/share
+            # /home/username/shared
             shared_root_dir = join(shared_root, user)
             shared_local_dir = join(home_dir, shared_local)
-            make_and_own(shared_root_dir)
+
+            if args.nfs_server:
+                make_and_own(shared_root_dir)
 
             # check for the symlink
             if not os.path.islink(shared_local_dir):
-                try:
-                    os.symlink(shared_root_dir, shared_local_dir)
-                except OSError:
-                    print("your local shared cannot be made for %" % user)
+
+                # check if mounted...otherwise ignore
+                if os.path.ismount(os.path.abspath(shared_root)):
+
+                    try:
+                        os.symlink(shared_root_dir, shared_local_dir)
+                    except OSError:
+                        print("your local shared cannot be made for %" % user)
 
             if os.path.islink(shared_local_dir):
                 os.lchown(shared_local_dir, uid, gid)
@@ -179,6 +185,9 @@ def main():
     parser_update.add_argument("--with-shared", action="store_true",
                                help="Set this to update a shared folder" +
                                     " in the user directory")
+    parser_update.add_argument("--nfs-server", action="store_true",
+                               help="Set this to update the shared folder" +
+                                    " on the nfs server")
     parser_update.set_defaults(func=update)
 
     parser_passwd = subp.add_parser("passwd")

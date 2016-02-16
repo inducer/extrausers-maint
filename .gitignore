@@ -7,3 +7,5 @@ build
 userdb.yml
 
 update.sh
+
+.DS_Store
