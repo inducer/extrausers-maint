@@ -114,9 +114,9 @@ def update(args):
 
             # check for the symlink
             if not os.path.islink(shared_local_dir):
-
                 # check if mounted...otherwise ignore
-                if os.path.ismount(os.path.abspath(shared_root)):
+                if (os.path.ismount(os.path.abspath(shared_root))
+                        or args.nfs_server):
 
                     try:
                         os.symlink(shared_root_dir, shared_local_dir)
