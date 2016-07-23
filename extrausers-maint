@@ -106,14 +106,20 @@ def update(args):
             # /shared/username
             # and
             # /home/username/shared
-            shared_root_dir = join(shared_root, user)
+            old_shared_root_dir = join(shared_root, user)
+            shared_root_dir = join(shared_root, "home", user)
             shared_local_dir = join(home_dir, shared_local)
 
             if args.nfs_server:
                 make_and_own(shared_root_dir)
 
+            # migrate from old location
+            if (os.path.islink(shared_local_dir)
+                    and os.readlink(shared_local_dir) == old_shared_root_dir):
+                os.unlink(shared_local_dir)
+
             # check for the symlink
-            if not os.path.islink(shared_local_dir):
+            if not os.path.exists(shared_local_dir):
                 # check if mounted...otherwise ignore
                 if (os.path.ismount(os.path.abspath(shared_root))
                         or args.nfs_server):
