@@ -26,7 +26,7 @@ def update(args):
     # ...unless the machine is not in the restricted list
     checkaccess = True
     thishost = socket.gethostname()
-    if thishost not in db.get("restricted_access", []):
+    if thishost not in db.get("restricted_access_hosts", []):
         checkaccess = False
 
     home_root = db["home_root"]
@@ -59,7 +59,7 @@ def update(args):
         # check to see if user is has restricted access
         # ...otherwise move on to next user
         if checkaccess:
-            if thishost not in udata.get("restricted_access", []):
+            if thishost not in udata.get("allowed_access_to_hosts", []):
                 continue
 
         home_dir = join(home_root, user)

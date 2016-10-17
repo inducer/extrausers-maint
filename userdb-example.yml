@@ -6,7 +6,7 @@ default_shell: /bin/bash
 shared_root: /shared
 shared_local: shared
 
-restricted_access:
+restricted_access_hosts:
     - somehost
 
 groups:
@@ -26,5 +26,5 @@ users:
                 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCQ7/Uj+4rM46PaegjrLHZmqu46ApWt2C15ozyPlWW0xFEi9FRvqD/lKZDq7eAE8W2+bVpyXselJWfZY/v4Lf1u/MTONakyiKTUhuTZT7Tko+AJpw2alzubdE6gy7bpQFcANUx/IL4mKRb/mN2DrekMPv7j3syHm0P3IgldB/Sw2tH3kdCiuPr3pQDLLvjAS4UrylTp+5sZjPoGPo4grmoTJn/TejPnt4e0BzGRX7grgfP+HJPyi/TnTesvIEdk+QGcZ+//qe8Q9uv3ic8yBmhY/8dHQ/nWc/h5SkLNYogT7Owzh3doSjeF4xSSj7apobLB3dknRw0iYvGy4ady7RXV andreask@localhost
         groups:
         - gpu
-        restricted_access:
+        allowed_access_to_hosts:
         - somehost
