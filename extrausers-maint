@@ -2,6 +2,7 @@
 from os.path import join, exists
 import os
 import sys
+import socket
 
 
 def load_db(args):
@@ -20,6 +21,13 @@ def save_db(args, db):
 
 def update(args):
     db = load_db(args)
+
+    # check that access is specifically given to this host
+    # ...unless the machine is not in the restricted list
+    checkaccess = True
+    thishost = socket.gethostname()
+    if thishost not in db.get("restricted_access_hosts", []):
+        checkaccess = False
 
     home_root = db["home_root"]
     extrausers_root = db["extrausers_root"]
@@ -50,6 +58,12 @@ def update(args):
     for user, udata in db["users"].items():
         if udata.get("disabled", False):
             continue
+
+        # check to see if user is has restricted access
+        # ...otherwise move on to next user
+        if checkaccess:
+            if thishost not in udata.get("allowed_access_to_hosts", []):
+                continue
 
         home_dir = join(home_root, user)
         uid = udata["uid"]
