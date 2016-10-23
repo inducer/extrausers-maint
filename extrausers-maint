@@ -48,6 +48,9 @@ def update(args):
     shadow_lines = []
 
     for user, udata in db["users"].items():
+        if udata.get("disabled", False):
+            continue
+
         home_dir = join(home_root, user)
         uid = udata["uid"]
         gid = udata.get("gid", uid)
