@@ -205,7 +205,8 @@ def find_next_uid(args):
 def print_emails(args):
     db = load_db(args)
     for udata in db["users"].values():
-        print(udata["email"])
+        if not udata.get("disabled", False):
+            print(udata["email"])
 
 
 def main():
