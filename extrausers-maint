@@ -5,22 +5,63 @@ import sys
 import socket
 
 
-def load_db(args):
+def load_db(db_name):
     import yaml
-    with open(args.db, "r") as dbf:
+    with open(db_name, "r") as dbf:
         yaml_text = dbf.read()
 
     return yaml.load(yaml_text)
 
 
-def save_db(args, db):
+def save_db(db_name, db):
     import yaml
-    with open(args.db, "w") as dbf:
+    with open(db_name, "w") as dbf:
         dbf.write(yaml.dump(db, default_flow_style=False, indent=4))
 
 
-def update(args):
-    db = load_db(args)
+def get_leases(udata):
+    leases = udata.get("leases")
+    if leases is None:
+        leases = [
+                {
+                    "expires": None,
+                    "justification": udata.get("remarks"),
+                    }
+                ]
+
+    return leases
+
+
+def is_user_active(name, udata):
+    if udata.get("disabled", False):
+        return False
+
+    result = False
+
+    import datetime
+    today = datetime.date.today()
+
+    for lease in get_leases(udata):
+        if not set(lease.keys()) <= set(["justification", "expires"]):
+            raise ValueError(f"leases for user {name} has unrecognized "
+                    "keys")
+
+        expires = lease.get("expires")
+        if not (expires is None or isinstance(expires, datetime.date)):
+            raise ValueError(f"'expires' in leases for user {name} "
+                    "is not a datetime or null")
+
+        if expires is None or today <= expires:
+            result = True
+            break
+
+    return result
+
+
+# {{{ update
+
+def cmd_update(args):
+    db = load_db(args.db)
 
     # check that access is specifically given to this host
     # ...unless the machine is not in the restricted list
@@ -38,14 +79,14 @@ def update(args):
         shared_root : location of the NFS shared mount point
                       e.g. /shared
                       this is an absolute path
-        shared_local : location of the local sim link to shared_root
+        shared_local : location of the local symlink to shared_root
                        e.g. shared will make $HOME/shared
                        this is a relative path
         """
         try:
             shared_root = db["shared_root"]
             shared_local = db["shared_local"]
-        except:
+        except Exception:
             raise KeyError("You need to set shared_root and shared_local" +
                            " in the yml")
 
@@ -56,7 +97,7 @@ def update(args):
     shadow_lines = []
 
     for user, udata in db["users"].items():
-        if udata.get("disabled", False):
+        if not is_user_active(user, udata):
             continue
 
         # check to see if user is has restricted access
@@ -178,8 +219,12 @@ def update(args):
     with open(join(extrausers_root, "group"), "w") as outf:
         outf.write("\n".join(group_lines) + "\n")
 
+# }}}
 
-def change_password(args):
+
+# {{{ change_password
+
+def cmd_change_password(args):
     from crypt import crypt
     from base64 import b64encode
     salt = b64encode(os.urandom(16)).decode()
@@ -192,21 +237,96 @@ def change_password(args):
 
     crypted_password = crypt(pw, "$6$%s$" % salt)
 
-    db = load_db(args)
+    db = load_db(args.db)
     db["users"][args.user]["crypted_password"] = crypted_password
-    save_db(args, db)
+    save_db(args.db, db)
+
+# }}}
 
 
-def find_next_uid(args):
-    db = load_db(args)
-    print("New UID:", max(udata["uid"] for udata in db["users"].values()) + 1)
+def find_taken_uids(db):
+    return set(udata["uid"] for udata in db["users"].values())
 
 
-def print_emails(args):
-    db = load_db(args)
+def find_next_uid(db):
+    return max(find_taken_uids(db)) + 1
+
+
+def cmd_find_next_uid(args):
+    db = load_db(args.db)
+    print("New UID:", find_next_uid(db))
+
+
+def cmd_print_emails(args):
+    db = load_db(args.db)
     for udata in db["users"].values():
         if not udata.get("disabled", False):
             print(udata["email"])
+
+
+# {{{ merge
+
+def cmd_merge(args):
+    db = load_db(args.db)
+    merged_db = load_db(args.merged_db)
+
+    db_users = db["users"]
+
+    for merged_username, merged_udata in merged_db["users"].items():
+        if merged_username not in db_users:
+            merged_udata = merged_udata.copy()
+            if "uid" not in merged_udata:
+                merged_udata["uid"] = find_next_uid(db)
+            else:
+                if merged_udata["uid"] in find_taken_uids(db):
+                    raise ValueError(
+                            f"UID for new user '{merged_username}' "
+                            "is already in use")
+
+            db_users[merged_username] = merged_udata
+            continue
+
+        db_udata = db_users[merged_username]
+
+        # {{{ leases
+
+        # Don't create 'leases' if it doesn't exist in either DB.
+        # Don't disturb DB 'leases' if it's not in the merged DB.
+        if "leases" in merged_udata:
+            db_leases = get_leases(db_udata)[:]
+
+            db_leases.extend(merged_udata["leases"])
+            db_udata["leases"] = db_leases
+
+        # }}}
+
+        def merge_list(name):
+            # Don't create *name* if it doesn't exist in either DB.
+            # Don't disturb DB *name* if it's not in the merged DB.
+            if name in merged_udata:
+                db_list = db_udata.get(name, [])
+                db_list.extend(merged_udata[name])
+                db_list = list(set(item.strip() for item in db_list))
+                db_udata[name] = db_list
+
+        merge_list("groups")
+        merge_list("allowed_access_to_hosts")
+        merge_list("ssh_keys")
+
+        if "name" in merged_udata:
+            db_udata["name"] = merged_udata["name"]
+
+        if "shell" in merged_udata:
+            db_udata["shell"] = merged_udata["shell"]
+
+        if "uid" in merged_udata:
+            if merged_udata["uid"] != db_udata["uid"]:
+                raise ValueError(f"UID for {merged_username} does not "
+                        "match UID in database")
+
+    save_db(args.db, db)
+
+# }}}
 
 
 def main():
@@ -223,17 +343,21 @@ def main():
     parser_update.add_argument("--nfs-server", action="store_true",
                                help="Set this to update the shared folder" +
                                     " on the nfs server")
-    parser_update.set_defaults(func=update)
+    parser_update.set_defaults(func=cmd_update)
 
     parser_passwd = subp.add_parser("passwd")
     parser_passwd.add_argument("user")
-    parser_passwd.set_defaults(func=change_password)
+    parser_passwd.set_defaults(func=cmd_change_password)
 
     parser_next_uid = subp.add_parser("next-uid")
-    parser_next_uid.set_defaults(func=find_next_uid)
+    parser_next_uid.set_defaults(func=cmd_find_next_uid)
 
     parser_next_uid = subp.add_parser("emails")
-    parser_next_uid.set_defaults(func=print_emails)
+    parser_next_uid.set_defaults(func=cmd_print_emails)
+
+    parser_merge = subp.add_parser("merge")
+    parser_merge.add_argument("--merged-db", metavar="FILE", default="userdb2.yml")
+    parser_merge.set_defaults(func=cmd_merge)
 
     args = parser.parse_args()
 
@@ -242,6 +366,7 @@ def main():
         sys.exit(1)
 
     args.func(args)
+
 
 if __name__ == "__main__":
     main()
