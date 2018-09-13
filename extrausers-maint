@@ -259,8 +259,8 @@ def cmd_find_next_uid(args):
 
 def cmd_print_emails(args):
     db = load_db(args.db)
-    for udata in db["users"].values():
-        if not udata.get("disabled", False):
+    for name, udata in db["users"].items():
+        if is_user_active(name, udata):
             print(udata["email"])
 
 
@@ -295,7 +295,16 @@ def cmd_merge(args):
         if "leases" in merged_udata:
             db_leases = get_leases(db_udata)[:]
 
-            db_leases.extend(merged_udata["leases"])
+            for merged_lease in merged_udata["leases"]:
+                found_db_lease = None
+                for i, db_lease in enumerate(db_leases):
+                    if db_lease["justification"] == merged_lease["justification"]:
+                        found_db_lease = i
+
+                if found_db_lease is not None:
+                    db_leases[found_db_lease] = merged_lease
+                else:
+                    db_leases.append(merged_lease)
             db_udata["leases"] = db_leases
 
         # }}}
