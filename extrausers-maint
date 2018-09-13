@@ -25,7 +25,7 @@ def get_leases(udata):
         leases = [
                 {
                     "expires": None,
-                    "justification": udata.get("remark"),
+                    "justification": udata.get("remarks"),
                     }
                 ]
 
@@ -43,12 +43,12 @@ def is_user_active(name, udata):
 
     for lease in get_leases(udata):
         if not set(lease.keys()) <= set(["justification", "expires"]):
-            raise ValueError("leases for user f{name} has unrecognized "
+            raise ValueError(f"leases for user {name} has unrecognized "
                     "keys")
 
         expires = lease.get("expires")
         if not (expires is None or isinstance(expires, datetime.date)):
-            raise ValueError("'expires' in leases for user f{name} "
+            raise ValueError(f"'expires' in leases for user {name} "
                     "is not a datetime or null")
 
         if expires is None or today <= expires:
