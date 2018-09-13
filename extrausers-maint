@@ -249,7 +249,7 @@ def find_taken_uids(db):
 
 
 def find_next_uid(db):
-    return max(find_taken_uids()) + 1
+    return max(find_taken_uids(db)) + 1
 
 
 def cmd_find_next_uid(args):
@@ -272,11 +272,11 @@ def cmd_merge(args):
 
     db_users = db["users"]
 
-    for merged_username, merged_udata in merged_db["users"].keys():
+    for merged_username, merged_udata in merged_db["users"].items():
         if merged_username not in db_users:
             merged_udata = merged_udata.copy()
             if "uid" not in merged_udata:
-                merged_udata["uid"] = find_next_uid()
+                merged_udata["uid"] = find_next_uid(db)
             else:
                 if merged_udata["uid"] in find_taken_uids(db):
                     raise ValueError(
@@ -356,7 +356,7 @@ def main():
     parser_next_uid.set_defaults(func=cmd_print_emails)
 
     parser_merge = subp.add_parser("merge")
-    parser.add_argument("--merged-db", metavar="FILE", default="userdb2.yml")
+    parser_merge.add_argument("--merged-db", metavar="FILE", default="userdb2.yml")
     parser_merge.set_defaults(func=cmd_merge)
 
     args = parser.parse_args()
