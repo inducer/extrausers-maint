@@ -1,9 +1,16 @@
 # rename to userdb.yml
 
 home_root: /home
+
 extrausers_root: /var/lib/extrausers
+
 default_shell: /bin/bash
+
+# A file system location visible to all hosts on which this applies
 shared_root: /shared
+
+# Location of the local symlink to shared_root e.g. shared will make
+# $HOME/shared, this is path relative to the home directory.
 shared_local: shared
 
 restricted_access_hosts:
@@ -18,14 +25,42 @@ groups:
 users:
     andreask:
         uid: 3000
-        disabled: False  # not required, defaults to False
         name: Andreas Kloeckner
+
+        # not required, defaults to False
+        disabled: False
+
+        # not required, defaults to default_shell above
         shell: /bin/zsh
+
+        # not required, defaults to none set
         crypted_password: $6$o9dbkfIa$JLHbb9HTzeJkSjLz/enmZPgHj0vEFQVo1d/6CjRiBoufjZKTjyUsmY2ihrDuQj/KzYL7fVHWViQHYyP/8oanE0
+
+        # not required, defaults to empty
         ssh_keys:
             - |
                 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCQ7/Uj+4rM46PaegjrLHZmqu46ApWt2C15ozyPlWW0xFEi9FRvqD/lKZDq7eAE8W2+bVpyXselJWfZY/v4Lf1u/MTONakyiKTUhuTZT7Tko+AJpw2alzubdE6gy7bpQFcANUx/IL4mKRb/mN2DrekMPv7j3syHm0P3IgldB/Sw2tH3kdCiuPr3pQDLLvjAS4UrylTp+5sZjPoGPo4grmoTJn/TejPnt4e0BzGRX7grgfP+HJPyi/TnTesvIEdk+QGcZ+//qe8Q9uv3ic8yBmhY/8dHQ/nWc/h5SkLNYogT7Owzh3doSjeF4xSSj7apobLB3dknRw0iYvGy4ady7RXV andreask@localhost
+
+        # not required, defaults to empty
         groups:
         - gpu
+
+        # not required, defaults to empty
         allowed_access_to_hosts:
         - somehost
+
+    student123:
+        uid: 3001
+        name: Grad Student
+        ssh_keys:
+            - |
+                ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGzoKAdaO+pF1JVNVDJ0DeeRG68E9tyPpLrJUKqi0R3I andreas@bolt
+
+        # Absence of a 'leases' section corresponds to a single non-expiring lease
+        leases:
+        -
+            justification: "Participation in course CS123"
+            expires: 2019-02-31
+        -
+            justification: "Grad student with Andreas"
+            expires: null
