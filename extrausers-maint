@@ -316,6 +316,9 @@ def cmd_merge(args):
         if "name" in merged_udata:
             db_udata["name"] = merged_udata["name"]
 
+        if "email" in merged_udata:
+            db_udata["email"] = merged_udata["email"]
+
         if "shell" in merged_udata:
             db_udata["shell"] = merged_udata["shell"]
 
