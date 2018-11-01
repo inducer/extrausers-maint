@@ -96,6 +96,19 @@ def cmd_update(args):
     passwd_lines = []
     shadow_lines = []
 
+    # {{{ check for multiply assigned UIDs
+
+    taken_uids = set()
+    for user, udata in db["users"].items():
+        uid = udata["uid"]
+
+        if uid in taken_uids:
+            raise ValueError(f"UID {uid} is assigned multiple times")
+
+        taken_uids.add(uid)
+
+    # }}}
+
     for user, udata in db["users"].items():
         home_dir = join(home_root, user)
 
