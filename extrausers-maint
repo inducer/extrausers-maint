@@ -97,7 +97,13 @@ def cmd_update(args):
     shadow_lines = []
 
     for user, udata in db["users"].items():
+        home_dir = join(home_root, user)
+
         if not is_user_active(user, udata):
+            if exists(home_dir):
+                os.chown(home_dir, 0, 0)  # set ownership to root
+                os.chmod(home_dir, 0o000)  # no access
+
             continue
 
         # check to see if user is has restricted access
@@ -106,7 +112,6 @@ def cmd_update(args):
             if thishost not in udata.get("allowed_access_to_hosts", []):
                 continue
 
-        home_dir = join(home_root, user)
         uid = udata["uid"]
         gid = udata.get("gid", uid)
 
@@ -140,6 +145,20 @@ def cmd_update(args):
                 os.makedirs(d)
                 if not args.no_chown:
                     os.chown(d, uid, gid)
+            else:
+                if not args.no_chown:
+                    st = os.stat(d)
+                    if (st.st_uid, st.st_gid, st.st_mode & 0o777) == (0, 0, 0):
+                        # previously disabled, reenable
+                        os.chown(d, uid, gid)
+                        os.chmod(d, 0o755)
+                    else:
+                        if st.st_uid != uid:
+                            raise ValueError(
+                                    f"{d} is owned by uid {st.st_uid}, should be {uid}")
+                        if st.st_gid != gid:
+                            raise ValueError(
+                                    f"{d} is owned by gid {st.st_gid}, should be {gid}")
 
         ssh_dir = join(home_dir, ".ssh")
 
