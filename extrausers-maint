@@ -10,7 +10,7 @@ def load_db(db_name):
     with open(db_name, "r") as dbf:
         yaml_text = dbf.read()
 
-    return yaml.load(yaml_text)
+    return yaml.load(yaml_text, Loader=yaml.SafeLoader)
 
 
 def save_db(db_name, db):
