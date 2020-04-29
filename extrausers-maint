@@ -259,7 +259,7 @@ def cmd_update(args):
 def cmd_change_password(args):
     from crypt import crypt
     from base64 import b64encode
-    salt = b64encode(os.urandom(16)).decode()
+    salt = b64encode(os.urandom(16)).decode().replace("=", "")
     import getpass
     pw = getpass.getpass()
     pw_confirm = getpass.getpass()
@@ -267,7 +267,8 @@ def cmd_change_password(args):
     if pw != pw_confirm:
         raise RuntimeError("passwords do not match")
 
-    crypted_password = crypt(pw, "$6$%s$" % salt)
+    salt_for_crypt = "$6$%s$" % salt
+    crypted_password = crypt(pw, salt_for_crypt)
 
     db = load_db(args.db)
     db["users"][args.user]["crypted_password"] = crypted_password
