@@ -294,7 +294,7 @@ def cmd_print_emails(args):
     db = load_db(args.db)
     for name, udata in db["users"].items():
         if is_user_active(name, udata):
-            print(udata["email"])
+            print(udata["email"], udata["name"])
 
 
 # {{{ merge
