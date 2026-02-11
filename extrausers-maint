@@ -1,61 +1,163 @@
-#! /usr/bin/env python3
-from os.path import join, exists
+#!/usr/bin/env -S uv run --script
+#
+# /// script
+# dependencies = [
+#   "pydantic",
+#   "pyyaml",
+#   "typing-extensions>=4.0",
+# ]
+# ///
+
+# pyright: reportExplicitAny=none, reportAny=none, reportUnusedCallResult=none
+
 import os
-import sys
 import socket
+import sys
+from datetime import date
+from os.path import exists, join
+from typing import Annotated, Any
+
+from pydantic import BaseModel, Field, StringConstraints, model_validator
+from typing_extensions import Self
 
 
-def load_db(db_name):
+Username = Annotated[
+    str, StringConstraints(pattern=r"^[-_a-z0-9]+$", min_length=3)]
+Groupname = Annotated[
+    str, StringConstraints(pattern=r"^[-_a-z0-9]+$", min_length=3)]
+SSHKey = Annotated[
+    str, StringConstraints(pattern=r"ssh-.*")]
+
+
+class Lease(BaseModel):
+    expires: date | None
+    justification: str
+
+
+class User(BaseModel):
+    disabled: bool = False
+    name: str
+    email: str
+    uid: int
+    crypted_password: str | None = None
+    ssh_keys: list[SSHKey] = Field(default_factory=list)
+    gid: int
+    shell: str | None = None
+    remarks: str | None = None
+    leases: list[Lease]
+    groups: list[Groupname] = Field(default_factory=list)
+    allowed_access_to_hosts: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def populate_leases(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "leases" not in data or data["leases"] is None:
+                if "remarks" not in data or not data["remarks"]:
+                    raise ValueError(
+                            "remarks needed to generate lease, must be present")
+                data["leases"] = [{
+                    "expires": None,
+                    "justification": data.get("remarks", "unspecified?")
+                }]
+
+        return data
+
+    @model_validator(mode="before")
+    @classmethod
+    def set_default_gid(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "gid" not in data and "uid" in data:
+                data["gid"] = data["uid"]
+
+        return data
+
+    def is_active(self):
+        if self.disabled:
+            return False
+
+        result = False
+
+        import datetime
+        today = datetime.date.today()
+
+        for lease in self.leases:
+            if lease.expires is None or today <= lease.expires:
+                result = True
+                break
+
+        return result
+
+
+class Group(BaseModel):
+    gid: int
+    members: list[Username] = Field(default_factory=list)
+
+
+class UserDatabase(BaseModel):
+    default_shell: str
+    extrausers_root: str
+    groups: dict[Groupname, Group]
+    home_root: str
+    shared_local: str | None = None
+    """
+    Location of the local symlink to shared_root e.g. shared will make $HOME/shared.
+    this is a relative path
+    """
+
+    shared_root: str | None = None
+    """Location of the NFS shared mount point e.g. /shared this is an absolute path."""
+
+    restricted_access_hosts: list[str] = Field(default_factory=list)
+    users: dict[Username, User]
+
+    @model_validator(mode="after")
+    def check_uids_unique(self) -> Self:
+        taken_uids: set[int] = set()
+        for udata in self.users.values():
+            uid = udata.uid
+
+            if uid in taken_uids:
+                raise ValueError(f"UID {uid} is assigned multiple times")
+
+            taken_uids.add(uid)
+
+        return self
+
+
+def load_db(db_name: str):
     import yaml
-    with open(db_name, "r") as dbf:
+    with open(db_name) as dbf:
         yaml_text = dbf.read()
 
-    return yaml.load(yaml_text, Loader=yaml.SafeLoader)
+    return UserDatabase.model_validate(yaml.load(yaml_text, Loader=yaml.SafeLoader))
 
 
-def save_db(db_name, db):
+def save_db(db_name: str, db: UserDatabase):
     import yaml
     with open(db_name, "w") as dbf:
-        dbf.write(yaml.dump(db, default_flow_style=False, indent=4))
+        dbf.write(yaml.dump(db.model_dump(), default_flow_style=False, indent=4))
 
 
-def get_leases(udata):
-    leases = udata.get("leases")
-    if leases is None:
-        leases = [
-                {
-                    "expires": None,
-                    "justification": udata.get("remarks"),
-                    }
-                ]
-
-    return leases
-
-
-def is_user_active(name, udata):
-    if udata.get("disabled", False):
-        return False
-
-    result = False
-
-    import datetime
-    today = datetime.date.today()
-
-    for lease in get_leases(udata):
-        if not set(lease.keys()) <= set(["justification", "expires"]):
-            raise ValueError(f"leases for user {name} has unrecognized "
-                    "keys")
-
-        expires = lease.get("expires")
-        if not (expires is None or isinstance(expires, datetime.date)):
-            raise ValueError(f"'expires' in leases for user {name} "
-                    "is not a datetime or null")
-
-        if expires is None or today <= expires:
-            result = True
-            break
-
-    return result
+def make_and_own(d: str, uid: int, gid: int, *, check_only: bool):
+    if not exists(d):
+        os.makedirs(d)
+        if not check_only:
+            os.chown(d, uid, gid)
+    else:
+        if not check_only:
+            st = os.stat(d)
+            if (st.st_uid, st.st_gid, st.st_mode & 0o777) == (0, 0, 0):
+                # previously disabled, reenable
+                os.chown(d, uid, gid)
+                os.chmod(d, 0o755)
+            else:
+                if st.st_uid != uid:
+                    raise ValueError(
+                            f"{d} is owned by uid {st.st_uid}, should be {uid}")
+                if st.st_gid != gid:
+                    raise ValueError(
+                            f"{d} is owned by gid {st.st_gid}, should be {gid}")
 
 
 # {{{ update
@@ -67,52 +169,19 @@ def cmd_update(args):
     # ...unless the machine is not in the restricted list
     checkaccess = True
     thishost = socket.gethostname()
-    if thishost not in db.get("restricted_access_hosts", []):
+    if thishost not in db.restricted_access_hosts:
         checkaccess = False
 
-    home_root = db["home_root"]
-    extrausers_root = db["extrausers_root"]
-    default_shell = db.get("default_shell")
+    group_members: dict[str, list[str]] = {}
+    gids: dict[Username, int] = {}
 
-    if args.with_shared:
-        """
-        shared_root : location of the NFS shared mount point
-                      e.g. /shared
-                      this is an absolute path
-        shared_local : location of the local symlink to shared_root
-                       e.g. shared will make $HOME/shared
-                       this is a relative path
-        """
-        try:
-            shared_root = db["shared_root"]
-            shared_local = db["shared_local"]
-        except Exception:
-            raise KeyError("You need to set shared_root and shared_local" +
-                           " in the yml")
+    passwd_lines: list[str] = []
+    shadow_lines: list[str] = []
 
-    group_members = {}
-    gids = {}
+    for user, udata in db.users.items():
+        home_dir = join(db.home_root, user)
 
-    passwd_lines = []
-    shadow_lines = []
-
-    # {{{ check for multiply assigned UIDs
-
-    taken_uids = set()
-    for user, udata in db["users"].items():
-        uid = udata["uid"]
-
-        if uid in taken_uids:
-            raise ValueError(f"UID {uid} is assigned multiple times")
-
-        taken_uids.add(uid)
-
-    # }}}
-
-    for user, udata in db["users"].items():
-        home_dir = join(home_root, user)
-
-        if not is_user_active(user, udata):
+        if not udata.is_active():
             if exists(home_dir):
                 os.chown(home_dir, 0, 0)  # set ownership to root
                 os.chmod(home_dir, 0o000)  # no access
@@ -122,24 +191,21 @@ def cmd_update(args):
         # check to see if user is has restricted access
         # ...otherwise move on to next user
         if checkaccess:
-            if thishost not in udata.get("allowed_access_to_hosts", []):
+            if thishost not in udata.allowed_access_to_hosts:
                 continue
-
-        uid = udata["uid"]
-        gid = udata.get("gid", uid)
 
         passwd_lines.append(":".join([
             user,
             "x",
-            str(uid),
-            str(gid),
-            udata["name"],
+            str(udata.uid),
+            str(udata.gid),
+            udata.name,
             home_dir,
-            udata.get("shell", default_shell)]))
+            udata.shell or db.default_shell]))
 
         shadow_lines.append(":".join([
             user,
-            udata.get("crypted_password", "x"),
+            udata.crypted_password or "x",
             "16289",
             "0",
             "99999",
@@ -148,35 +214,15 @@ def cmd_update(args):
             "",
             ""]))
 
-        for grp in udata.get("groups", []):
-            group_members[grp] = group_members.get(grp, []) + [user]
+        for grp in udata.groups:
+            group_members[grp] = [*group_members.get(grp, []), user]
 
-        gids[user] = gid
-
-        def make_and_own(d):
-            if not exists(d):
-                os.makedirs(d)
-                if not args.no_chown:
-                    os.chown(d, uid, gid)
-            else:
-                if not args.no_chown:
-                    st = os.stat(d)
-                    if (st.st_uid, st.st_gid, st.st_mode & 0o777) == (0, 0, 0):
-                        # previously disabled, reenable
-                        os.chown(d, uid, gid)
-                        os.chmod(d, 0o755)
-                    else:
-                        if st.st_uid != uid:
-                            raise ValueError(
-                                    f"{d} is owned by uid {st.st_uid}, should be {uid}")
-                        if st.st_gid != gid:
-                            raise ValueError(
-                                    f"{d} is owned by gid {st.st_gid}, should be {gid}")
+        gids[user] = udata.gid
 
         ssh_dir = join(home_dir, ".ssh")
 
-        make_and_own(home_dir)
-        make_and_own(ssh_dir)
+        make_and_own(home_dir, udata.uid, udata.gid, check_only=args.no_chown)
+        make_and_own(ssh_dir, udata.uid, udata.gid, check_only=args.no_chown)
 
         keys_file = join(ssh_dir, "authorized_keys")
 
@@ -184,24 +230,28 @@ def cmd_update(args):
             keysf.write("# automatically generated by extrausers-maint\n")
             keysf.write("# WARNING! Do not edit--file will be overwritten.\n")
             keysf.write("\n")
-            for l in udata.get("ssh_keys", []):
-                keysf.write(l.strip() + "\n")
+            for k in udata.ssh_keys:
+                keysf.write(k.strip() + "\n")
 
         if not args.no_chown:
-            os.chown(keys_file, uid, gid)
+            os.chown(keys_file, udata.uid, udata.gid)
             os.chmod(keys_file, 0o400)
 
         if args.with_shared:
+            assert db.shared_root
+            assert db.shared_local
+
             # this makes (for example)
             # /shared/username
             # and
             # /home/username/shared
-            old_shared_root_dir = join(shared_root, user)
-            shared_root_dir = join(shared_root, "home", user)
-            shared_local_dir = join(home_dir, shared_local)
+            old_shared_root_dir = join(db.shared_root, user)
+            shared_home_dir = join(db.shared_root, "home", user)
+            shared_local_dir = join(home_dir, db.shared_local)
 
             if args.nfs_server:
-                make_and_own(shared_root_dir)
+                make_and_own(shared_home_dir,
+                             udata.uid, udata.gid, check_only=args.no_chown)
 
             # migrate from old location
             if (os.path.islink(shared_local_dir)
@@ -211,24 +261,24 @@ def cmd_update(args):
             # check for the symlink
             if not os.path.exists(shared_local_dir):
                 # check if mounted...otherwise ignore
-                if (os.path.ismount(os.path.abspath(shared_root))
+                if (os.path.ismount(os.path.abspath(db.shared_root))
                         or args.nfs_server):
 
                     try:
-                        os.symlink(shared_root_dir, shared_local_dir)
+                        os.symlink(shared_home_dir, shared_local_dir)
                     except OSError:
-                        print("your local shared cannot be made for %" % user)
+                        print("your local shared cannot be made for %s" % user)
 
             if os.path.islink(shared_local_dir):
-                os.lchown(shared_local_dir, uid, gid)
+                os.lchown(shared_local_dir, udata.uid, udata.gid)
 
-    for grp, gdata in db["groups"].items():
-        gids[grp] = gdata["gid"]
+    for grp, gdata in db.groups.items():
+        gids[grp] = gdata.gid
         group_members[grp] = (
             group_members.get(grp, [])
-            + gdata.get("members", []))
+            + gdata.members)
 
-    group_lines = []
+    group_lines: list[str] = []
 
     for grp in gids:
         members = group_members.get(grp, [])
@@ -240,15 +290,15 @@ def cmd_update(args):
             str(gid),
             ",".join(members)]))
 
-    with open(join(extrausers_root, "passwd"), "w") as outf:
+    with open(join(db.extrausers_root, "passwd"), "w") as outf:
         outf.write("\n".join(passwd_lines) + "\n")
 
-    shadow_file = join(extrausers_root, "shadow")
+    shadow_file = join(db.extrausers_root, "shadow")
     with open(shadow_file, "w") as outf:
         outf.write("\n".join(shadow_lines) + "\n")
     os.chmod(shadow_file, 0o600)
 
-    with open(join(extrausers_root, "group"), "w") as outf:
+    with open(join(db.extrausers_root, "group"), "w") as outf:
         outf.write("\n".join(group_lines) + "\n")
 
 # }}}
@@ -257,8 +307,8 @@ def cmd_update(args):
 # {{{ change_password
 
 def cmd_change_password(args):
-    from crypt import crypt
     from base64 import b64encode
+    from crypt import crypt
     salt = b64encode(os.urandom(16)).decode().replace("=", "")
     import getpass
     pw = getpass.getpass()
@@ -271,17 +321,17 @@ def cmd_change_password(args):
     crypted_password = crypt(pw, salt_for_crypt)
 
     db = load_db(args.db)
-    db["users"][args.user]["crypted_password"] = crypted_password
+    db.users[args.user].crypted_password = crypted_password
     save_db(args.db, db)
 
 # }}}
 
 
-def find_taken_uids(db):
-    return set(udata["uid"] for udata in db["users"].values())
+def find_taken_uids(db: UserDatabase):
+    return {udata.uid for udata in db.users.values()}
 
 
-def find_next_uid(db):
+def find_next_uid(db: UserDatabase):
     return max(find_taken_uids(db)) + 1
 
 
@@ -292,86 +342,9 @@ def cmd_find_next_uid(args):
 
 def cmd_print_emails(args):
     db = load_db(args.db)
-    for name, udata in db["users"].items():
-        if is_user_active(name, udata):
-            print(udata["email"], udata["name"])
-
-
-# {{{ merge
-
-def cmd_merge(args):
-    db = load_db(args.db)
-    merged_db = load_db(args.merged_db)
-
-    db_users = db["users"]
-
-    for merged_username, merged_udata in merged_db["users"].items():
-        if merged_username not in db_users:
-            merged_udata = merged_udata.copy()
-            if "uid" not in merged_udata:
-                merged_udata["uid"] = find_next_uid(db)
-            else:
-                if merged_udata["uid"] in find_taken_uids(db):
-                    raise ValueError(
-                            f"UID for new user '{merged_username}' "
-                            "is already in use")
-
-            db_users[merged_username] = merged_udata
-            continue
-
-        db_udata = db_users[merged_username]
-
-        # {{{ leases
-
-        # Don't create 'leases' if it doesn't exist in either DB.
-        # Don't disturb DB 'leases' if it's not in the merged DB.
-        if "leases" in merged_udata:
-            db_leases = get_leases(db_udata)[:]
-
-            for merged_lease in merged_udata["leases"]:
-                found_db_lease = None
-                for i, db_lease in enumerate(db_leases):
-                    if db_lease["justification"] == merged_lease["justification"]:
-                        found_db_lease = i
-
-                if found_db_lease is not None:
-                    db_leases[found_db_lease] = merged_lease
-                else:
-                    db_leases.append(merged_lease)
-            db_udata["leases"] = db_leases
-
-        # }}}
-
-        def merge_list(name):
-            # Don't create *name* if it doesn't exist in either DB.
-            # Don't disturb DB *name* if it's not in the merged DB.
-            if name in merged_udata:
-                db_list = db_udata.get(name, [])
-                db_list.extend(merged_udata[name])
-                db_list = list(set(item.strip() for item in db_list))
-                db_udata[name] = db_list
-
-        merge_list("groups")
-        merge_list("allowed_access_to_hosts")
-        merge_list("ssh_keys")
-
-        if "name" in merged_udata:
-            db_udata["name"] = merged_udata["name"]
-
-        if "email" in merged_udata:
-            db_udata["email"] = merged_udata["email"]
-
-        if "shell" in merged_udata:
-            db_udata["shell"] = merged_udata["shell"]
-
-        if "uid" in merged_udata:
-            if merged_udata["uid"] != db_udata["uid"]:
-                raise ValueError(f"UID for {merged_username} does not "
-                        "match UID in database")
-
-    save_db(args.db, db)
-
-# }}}
+    for udata in db.users.values():
+        if udata.is_active():
+            print(udata.email, udata.name)
 
 
 def main():
@@ -399,10 +372,6 @@ def main():
 
     parser_next_uid = subp.add_parser("emails")
     parser_next_uid.set_defaults(func=cmd_print_emails)
-
-    parser_merge = subp.add_parser("merge")
-    parser_merge.add_argument("--merged-db", metavar="FILE", default="userdb2.yml")
-    parser_merge.set_defaults(func=cmd_merge)
 
     args = parser.parse_args()
 

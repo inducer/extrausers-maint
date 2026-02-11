@@ -26,6 +26,8 @@ users:
     andreask:
         uid: 3000
         name: Andreas Kloeckner
+        remarks: Admin
+        email: andreask@illinois.edu
 
         # not required, defaults to False
         disabled: False
@@ -52,6 +54,7 @@ users:
     student123:
         uid: 3001
         name: Grad Student
+        email: grad@uni.edu
         ssh_keys:
             - |
                 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGzoKAdaO+pF1JVNVDJ0DeeRG68E9tyPpLrJUKqi0R3I andreas@bolt
@@ -60,7 +63,7 @@ users:
         leases:
         -
             justification: "Participation in course CS123"
-            expires: 2019-02-31
+            expires: 2019-02-23
         -
             justification: "Grad student with Andreas"
             expires: null
